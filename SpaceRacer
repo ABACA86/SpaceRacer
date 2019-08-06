@@ -1,0 +1,375 @@
+import turtle
+import time
+import random
+import os
+#import playsound
+
+PACE = 5  # Initial player speed
+SCORE = 0  # The score (duh)
+LIVES = 5  # The lives (duh)
+GAME_OVER = False  # This is True on game over
+
+STAR_IMAGE = 'images/star.gif'
+SOUND_HURT = 'sounds/hurt2.wav'
+SOUND_GAMEOVER = 'sounds/gameover4.wav'
+SOUND_STAR = 'sounds/coin3.wav'
+SOUND_EXPLOSION = 'sounds/explosion1.wav'
+
+window = turtle.Screen()
+player = turtle.Turtle()
+enemy = turtle.Turtle()
+star = turtle.Turtle()
+INITIAL_TIME = int(time.time())  # Game time (for spawning stars)
+
+
+def setup_window():
+    window.setup(1024, 768)
+    window.title('SpaceRacer')
+    window.bgcolor('black')
+    window.bgpic('images/spacebgrnd.gif')
+    window.tracer(False)
+
+
+def draw_border():
+    border = turtle.Turtle()
+    border.color('white')
+    border.penup()  # Move turtle without drawing
+    border.setposition(-300, -300)
+    border.pendown()  # Start drawing
+    border.pensize(3)
+    for i in range(4):
+        border.forward(600)
+        border.left(90)
+    border.hideturtle()
+
+
+def create_player():
+    player.shape('triangle')
+    player.color('red')
+    player.penup()
+    player.speed('normal')
+
+
+def create_enemy():
+    enemy.shape('triangle')
+    enemy.color('blue')
+    enemy.penup()
+    enemy.speed('normal')
+    enemy.setposition(50, 50)
+
+
+def create_star():
+    turtle.Screen().addshape(STAR_IMAGE)
+    star.shape(STAR_IMAGE)
+    star.penup()
+    star.speed(0)
+
+
+def init_controls():
+    """
+    Listen for keyboard controls
+    """
+
+    # set response via keyboard
+    turtle.listen()  # open event handling to turtle
+
+    # move turtle using arrow keys
+    turtle.onkey(turn_left, "Left")
+    turtle.onkey(turn_right, "Right")
+    turtle.onkey(increase_speed, "Up")
+    turtle.onkey(decrease_speed, "Down")
+
+    # move turtle using WASD (gamers mode)
+    turtle.onkey(turn_left, "A")
+    turtle.onkey(turn_left, "a")
+    turtle.onkey(turn_right, "D")
+    turtle.onkey(turn_right, "d")
+    turtle.onkey(increase_speed, "W")
+    turtle.onkey(increase_speed, "w")
+    turtle.onkey(decrease_speed, "S")
+    turtle.onkey(decrease_speed, "s")
+
+    # New game?
+    turtle.onkey(check_exit, "N")
+    turtle.onkey(check_exit, "n")
+    turtle.onkey(reset_game, "Y")
+    turtle.onkey(reset_game, "y")
+
+
+def turn_left():
+    player.left(30)
+
+
+def turn_right():
+    player.right(30)
+
+
+def increase_speed():
+    global PACE
+    if PACE < 7:
+        PACE += 1
+
+
+def decrease_speed():
+    global PACE
+    if PACE > 1:
+        PACE -= 1
+
+
+def check_exit():
+    if LIVES == 0:
+        os._exit(0)
+
+
+def reset_game():
+    global GAME_OVER
+    GAME_OVER = False
+    clear_gameover() # TODO Uncomment me!
+    x = random.randint(-290, 290)
+    y = random.randint(-290, 290)
+    player.setposition(x, y)
+    start_game()
+
+
+def game_loop():
+    global LIVES, SCORE, INITIAL_TIME, GAME_OVER
+    INITIAL_TIME = int(time.time())
+
+    generate_star()
+    update_score()
+    update_lives()
+
+    while LIVES > 0:
+        player.forward(PACE)
+        enemy_action()
+        check_generate_star()
+        check_boundary_collision()
+        check_star_collision()
+        check_enemy_collision()
+
+    GAME_OVER = True
+    #playsound(SOUND_GAMEOVER)
+
+    draw_gameover()
+    while GAME_OVER:
+        enemy_action()
+
+
+def enemy_action():
+    heading = enemy.towards(player.xcor(), player.ycor())
+    enemy.setheading(heading)
+    enemy.forward(PACE - 1 if PACE > 4 else 4)
+
+
+def generate_star():
+    x = random.randint(-290, 290)
+    y = random.randint(-290, 290)
+    star.setposition(x, y)
+
+
+def check_generate_star():
+    global INITIAL_TIME
+    now = int(time.time())
+    if now - INITIAL_TIME > 9:
+        generate_star()
+        INITIAL_TIME = int(time.time())
+
+
+def check_boundary_collision():
+    """
+    Detect when the player collides with the wall
+    On collision, play a sound and reduce player lives
+    Also turn the player 180 degrees
+    """
+
+    global LIVES
+    if player.xcor() > 290 or player.xcor() < -290:  # check x coordinates
+        player.right(180)  # turn 180 derees
+        #playsound(SOUND_HURT)
+        LIVES -= 1
+        update_lives()
+    elif player.ycor() > 290 or player.ycor() < -290:  # check y coordinates
+        player.left(180)
+        #playsound(SOUND_HURT)
+        LIVES -= 1
+        update_lives()
+
+
+def check_star_collision():
+    """
+    Detect when the player collides with a star
+    On collision, play a sound and increase player score
+    Also generate a new star
+    """
+
+    global SCORE, INITIAL_TIME
+    if is_collision(player, star):
+        star.setposition(random.randint(-290, 290), random.randint(-290, 290))  # set star in new position
+        INITIAL_TIME = int(time.time())  # refresh starting time for new star
+        SCORE += 1  # increase score by 1
+        update_score()
+
+
+
+def check_enemy_collision():
+    """
+    Detect when the player collides with the enemy
+    On collision, play a sound and decrease player lives
+    Also move the enemy to a random location
+    """
+    global LIVES
+    if abs(player.xcor() - enemy.xcor()) < 10 and abs(player.ycor() - enemy.ycor()) < 10:
+        #playsound(SOUND_EXPLOSION)
+        LIVES -= 1
+        update_lives()
+        enemy.setposition(random.randint(-290, 290), random.randint(-290, 290))
+
+
+def is_collision(entity1, entity2):
+    """
+    Check for collisions between two entities.
+    If entities are within 9 pixels of each other, this is seen as a collision.
+    :param entity1: the first entity (Ex: the player)
+    :param entity2: the second entity (Ex: the enemy or a star)
+    :return: true if a collision is detected
+    """
+
+    if abs(entity1.xcor() - entity2.xcor()) < 9 and abs(entity1.ycor() - entity2.ycor()) < 9:
+        return True
+    else:
+        return False
+
+
+def update_lives():
+    lives_offset_width = 100
+    lives_offset_height = 200
+    window.tracer(False)
+    lives_area = turtle.Turtle()
+    lives_area_font = ('arial', '18', 'bold')
+    lives_area.ht()
+
+    text = 'Lives: ' + str(LIVES)
+
+    clear_text(lives_area, lives_offset_width, lives_offset_height)
+
+    lives_area.color('red')
+    lives_area.write(text, font=lives_area_font, move=False)
+    window.tracer(True)
+
+
+def update_score():
+    score_offset_width = 100
+    score_offset_height = 100
+    window.tracer(False)
+    score_area = turtle.Turtle()
+    score_area_font = ('arial', '18', 'bold')
+    score_area.ht()
+
+    text = 'Score: ' + str(SCORE)
+
+    clear_text(score_area, score_offset_width, score_offset_height)
+
+    score_area.color('blue')
+    score_area.write(text, font=score_area_font, move=False)
+    window.tracer(True)
+
+
+def clear_text(area_turtle, offset_width, offset_height):
+    """
+    Clear an area before overwriting it
+    :param area_turtle: the turtle for the area to clear
+    :param offset_width: the x offset of the area
+    :param offset_height: the y offset of the area
+    """
+
+    screen = turtle.Screen()
+    area_turtle.penup()
+    area_turtle.goto(offset_width / 2 - screen.window_width() / 2, screen.window_height() / 2 - offset_height / 2)
+    area_turtle.pendown()
+    area_turtle.color(turtle.bgcolor())
+    area_turtle.begin_fill()
+    area_turtle.fd(160)
+    area_turtle.setheading(90)
+    area_turtle.fd(30)
+    area_turtle.setheading(180)
+    area_turtle.fd(160)
+    area_turtle.setheading(270)
+    area_turtle.fd(30)
+    area_turtle.setheading(0)
+    area_turtle.fd(10)
+    area_turtle.end_fill()
+
+
+def clear_gameover():
+    """
+    Clear the game over text area
+    """
+
+    text_offset_width = 950
+    text_offset_height = 1435
+    text2_offset_width = 910
+    text2_offset_height = 1500
+    gameover_area = turtle.Turtle()
+    gameover_area.ht()
+    window.tracer(False)
+    clear_text(gameover_area, text_offset_width, text_offset_height)
+    clear_text(gameover_area, text2_offset_width, text2_offset_height)
+    window.tracer(True)
+
+
+def draw_gameover():
+    """
+    Draw the game over text
+    Note: text = game over
+    Note: text2 = new game? y/n
+    """
+
+    text_offset_width = 950
+    text_offset_height = 1435
+    text2_offset_width = 920
+    text2_offset_height = 1500
+    window.tracer(False)
+    gameover_area = turtle.Turtle()
+    gameover_area_font = ('arial', '18', 'bold')
+    gameover_area.ht()
+
+    text = 'GAME OVER'
+    text2 = 'NEW GAME? Y/N'
+
+    # Clear text
+    clear_text(gameover_area, text_offset_width, text_offset_height)
+
+    # Write text
+    gameover_area.color("red")
+    gameover_area.write(text, font=gameover_area_font, move=False)
+
+    # Clear text 2
+    clear_text(gameover_area, text2_offset_width, text2_offset_height)
+
+    # Write text 2
+    gameover_area.color("blue")
+    gameover_area.write(text2, font=gameover_area_font, move=False)
+
+    window.tracer(True)
+
+
+def start_game():
+    global PACE, SCORE, LIVES
+    PACE = 5
+    SCORE = 0
+    LIVES = 5
+
+    setup_window()
+    draw_border()
+    window.update()
+    window.tracer(True)
+
+    create_player()
+    create_enemy()
+    create_star()
+    init_controls()
+
+    game_loop()
+
+
+start_game()
